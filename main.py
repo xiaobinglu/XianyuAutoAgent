@@ -428,6 +428,12 @@ class XianyuLive:
                     item_id = extract_item_id(message)
                     chat_id = extract_chat_id(message)
                     logger.info(f'交易成功 等待卖家发货')
+                    # 附带最近聊天记录供 LLM 参数提取
+                    chat_history = []
+                    if chat_id:
+                        ctx = self.context_manager.get_context_by_chat(chat_id)
+                        if ctx:
+                            chat_history = ctx[-20:]  # 最近 20 条
                     await self.event_emitter.emit({
                         "event_type": "ORDER_PAID",
                         "order_id": extract_order_id(message),
@@ -435,12 +441,13 @@ class XianyuLive:
                         "buyer_id": user_id,
                         "chat_id": chat_id,
                         "account_id": ACCOUNT_ID,
+                        "chat_history": chat_history,
                         "timestamp": time.time(),
                     })
                     return
 
-            except:
-                pass
+            except Exception as e:
+                logger.error(f"订单事件处理失败: {e}")
 
             # 判断消息类型
             if self.is_typing_status(message):
