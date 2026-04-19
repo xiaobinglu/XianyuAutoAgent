@@ -14,6 +14,7 @@ import random
 from utils.xianyu_utils import generate_mid, generate_uuid, trans_cookies, generate_device_id, decrypt
 from XianyuAgent import XianyuReplyBot
 from context_manager import ChatContextManager
+from event_emitter import EventEmitter, ACCOUNT_ID, extract_order_id, extract_item_id, extract_chat_id
 
 
 class XianyuLive:
@@ -26,6 +27,7 @@ class XianyuLive:
         self.myid = self.cookies['unb']
         self.device_id = generate_device_id(self.myid)
         self.context_manager = ChatContextManager()
+        self.event_emitter = EventEmitter()
         
         # 心跳相关配置
         self.heartbeat_interval = int(os.getenv("HEARTBEAT_INTERVAL", "15"))  # 心跳间隔，默认15秒
@@ -405,7 +407,6 @@ class XianyuLive:
                 return
 
             try:
-                # 判断是否为订单消息,需要自行编写付款后的逻辑
                 if message['3']['redReminder'] == '等待买家付款':
                     user_id = message['1'].split('@')[0]
                     user_url = f'https://www.goofish.com/personal?userId={user_id}'
@@ -413,13 +414,29 @@ class XianyuLive:
                     return
                 elif message['3']['redReminder'] == '交易关闭':
                     user_id = message['1'].split('@')[0]
-                    user_url = f'https://www.goofish.com/personal?userId={user_id}'
-                    logger.info(f'买家 {user_url} 交易关闭')
+                    logger.info(f'交易关闭')
+                    await self.event_emitter.emit({
+                        "event_type": "ORDER_CANCELLED",
+                        "order_id": extract_order_id(message),
+                        "buyer_id": user_id,
+                        "account_id": ACCOUNT_ID,
+                        "timestamp": time.time(),
+                    })
                     return
                 elif message['3']['redReminder'] == '等待卖家发货':
                     user_id = message['1'].split('@')[0]
-                    user_url = f'https://www.goofish.com/personal?userId={user_id}'
-                    logger.info(f'交易成功 {user_url} 等待卖家发货')
+                    item_id = extract_item_id(message)
+                    chat_id = extract_chat_id(message)
+                    logger.info(f'交易成功 等待卖家发货')
+                    await self.event_emitter.emit({
+                        "event_type": "ORDER_PAID",
+                        "order_id": extract_order_id(message),
+                        "item_id": item_id,
+                        "buyer_id": user_id,
+                        "chat_id": chat_id,
+                        "account_id": ACCOUNT_ID,
+                        "timestamp": time.time(),
+                    })
                     return
 
             except:
